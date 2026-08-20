@@ -2,6 +2,17 @@ import { useSyncExternalStore } from "react";
 import { GENERAL } from "./config";
 import { playerMaxXP, type RobotSave } from "./engine";
 import { ROBOT_MAP, ROBOTS, STARTER_ROBOTS } from "./robots";
+import {
+  applyMatch,
+  claimReward,
+  initialRanked,
+  newSeason,
+  normalizeRanked,
+  type MatchPerf,
+  type RankedOpponent,
+  type RankedOutcome,
+  type RankedState,
+} from "./ranked";
 import { defaultLoadout, MAX_LOADOUT } from "./skills";
 
 export interface GameState {
@@ -16,6 +27,8 @@ export interface GameState {
   battlesWon: number;
   /** 4 habilidades escolhidas por robô. */
   loadouts: Record<string, string[]>;
+  /** progresso do modo ranqueado. */
+  ranked: RankedState;
   /** progresso dos modos de jogo. */
   modes: {
     babelFloor: number;
@@ -28,10 +41,11 @@ export interface GameState {
 }
 
 const KEY = "campeoes-mecha-save-v1";
+const VERSION = 2;
 
 function initialState(): GameState {
   return {
-    version: 1,
+    version: VERSION,
     gold: 500,
     playerLevel: 1,
     playerXP: 0,
@@ -46,6 +60,7 @@ function initialState(): GameState {
     wonTournaments: [],
     battlesWon: 0,
     loadouts: {},
+    ranked: initialRanked(),
     modes: {
       babelFloor: 1,
       babelBest: 0,
@@ -68,7 +83,10 @@ function read(): GameState {
     return {
       ...base,
       ...parsed,
+      version: VERSION,
       loadouts: parsed.loadouts ?? {},
+      // migração v1 -> v2: saves antigos não tinham modo ranqueado
+      ranked: normalizeRanked(parsed.ranked),
       modes: { ...base.modes, ...(parsed.modes ?? {}) },
     };
   } catch {
@@ -202,6 +220,35 @@ export function setLoadout(robotId: string, skillIds: string[]) {
     ...st,
     loadouts: { ...st.loadouts, [robotId]: skillIds.slice(0, MAX_LOADOUT) },
   }));
+}
+
+// ------------------------------------------------------------- ranqueado
+/** Registra o resultado de uma partida ranqueada, paga o ouro e devolve o resumo. */
+export function applyRankedMatch(
+  win: boolean,
+  opp: RankedOpponent,
+  perf?: MatchPerf,
+): RankedOutcome {
+  const outcome = applyMatch(state.ranked, win, opp, perf);
+  setState((s) => ({
+    ...s,
+    ranked: outcome.state,
+    gold: Math.max(0, s.gold + outcome.gold),
+  }));
+  return outcome;
+}
+
+/** Coleta a recompensa de ouro de um rank já alcançado. */
+export function claimRankReward(rankIndex: number): number {
+  const res = claimReward(state.ranked, rankIndex);
+  if (res.gold <= 0) return 0;
+  setState((s) => ({ ...s, ranked: res.state, gold: s.gold + res.gold }));
+  return res.gold;
+}
+
+/** Encerra a temporada atual e inicia a próxima com reset suave. */
+export function startNewSeason() {
+  setState((s) => ({ ...s, ranked: newSeason(s.ranked) }));
 }
 
 export function setModeProgress(patch: Partial<GameState["modes"]>) {
