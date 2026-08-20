@@ -211,15 +211,28 @@ export function loadoutOf(s: GameState, robotId: string): string[] {
   const def = ROBOT_MAP[robotId];
   if (!def) return [];
   const valid = new Set(def.skills.map((k) => k.id));
-  const saved = (s.loadouts[robotId] ?? []).filter((id) => valid.has(id));
-  return saved.length === MAX_LOADOUT ? saved : defaultLoadout(def.skills);
+  const saved = [...new Set((s.loadouts[robotId] ?? []).filter((id) => valid.has(id)))].slice(
+    0,
+    MAX_LOADOUT,
+  );
+  if (saved.length === MAX_LOADOUT) return saved;
+  // kit incompleto: completa com o padrão mantendo a ordem escolhida
+  const fill = defaultLoadout(def.skills).filter((id) => !saved.includes(id));
+  return [...saved, ...fill].slice(0, MAX_LOADOUT);
 }
 
 export function setLoadout(robotId: string, skillIds: string[]) {
-  setState((st) => ({
-    ...st,
-    loadouts: { ...st.loadouts, [robotId]: skillIds.slice(0, MAX_LOADOUT) },
-  }));
+  const def = ROBOT_MAP[robotId];
+  const valid = new Set((def?.skills ?? []).map((k) => k.id));
+  const clean = [...new Set(skillIds.filter((id) => valid.has(id)))].slice(0, MAX_LOADOUT);
+  setState((st) => ({ ...st, loadouts: { ...st.loadouts, [robotId]: clean } }));
+}
+
+/** Reseta o kit de um robô para o padrão do chassi. */
+export function resetLoadout(robotId: string) {
+  const def = ROBOT_MAP[robotId];
+  if (!def) return;
+  setLoadout(robotId, defaultLoadout(def.skills));
 }
 
 // ------------------------------------------------------------- ranqueado
