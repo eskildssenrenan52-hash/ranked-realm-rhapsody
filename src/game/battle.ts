@@ -91,13 +91,17 @@ export function makeFighter(save: RobotSave, ai: boolean, uid: string): Fighter 
   const def = ROBOT_MAP[save.id];
   const st = totalStats(def, save, ai);
   const kitIds = new Set(def.skills.map((s) => s.id));
-  const chosen = (save.loadout ?? []).filter((id) => kitIds.has(id)).slice(0, MAX_LOADOUT);
+  const chosen = [
+    ...new Set((save.loadout ?? []).filter((id) => kitIds.has(id))),
+  ].slice(0, MAX_LOADOUT);
+  const fallback = ai
+    ? aiLoadout(save.id, save.level * 31 + save.id.length * 17)
+    : defaultLoadout(def.skills);
+  // kits parciais são completados com o padrão em vez de descartados
   const skillIds =
     chosen.length === MAX_LOADOUT
       ? chosen
-      : ai
-        ? aiLoadout(save.id, save.level * 31 + save.id.length * 17)
-        : defaultLoadout(def.skills);
+      : [...chosen, ...fallback.filter((id) => !chosen.includes(id))].slice(0, MAX_LOADOUT);
   return {
     uid,
     robotId: save.id,
